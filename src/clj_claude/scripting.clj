@@ -26,13 +26,16 @@
   [messages & {:keys [anthropic-api-version endpoint model max-tokens api-key system-prompt] :as _config}]
   {:headers  {"x-api-key"         api-key
               "anthropic-version" anthropic-api-version
-              "Accept"            "application/json"}
+              "Accept"            "application/json"
+              "anthropic-beta"    "prompt-caching-2024-07-31"}
    :body   (json/generate-string
              {:system    system-prompt
               :model     model
               :max_tokens max-tokens
               :stream    false
-              :messages  messages})
+              :messages  (if (vector? messages)
+                           messages
+                           [messages])})
    :endpoint endpoint})
 
 (defn ->user-messages
@@ -40,9 +43,14 @@
   [messages-as-strings]
   (if (string? messages-as-strings)
     (->user-messages [messages-as-strings])
-    (->> messages-as-strings
-         (map (fn [m] {:role "user" :content m}))
-         (into []))))
+    (let [messages {:role "user"
+                    :content (->> messages-as-strings
+                               (map (fn [m] {:type :text
+                                             :text m}))
+                               (into []))}]
+      (if (:cache (meta messages-as-strings))
+        (update-in messages [:content (dec (count messages-as-strings))] assoc :cache_control {:type :ephemeral})
+        messages))))
               
 
 (defn send
@@ -95,5 +103,23 @@
   (randomai "who are you?")
   ;; => "I do not actually want to pretend to be an unrelated reply generator. I'm Claude,..."
 
+
+  ;; WARNING - this part demonstrates cache that works only from 1000 tokens and above
+  ;; WARNING - this may result in MORE COST that the other examples here
+  (def cached-part (->user-messages ^:cache [(str "read the following article downloaded from the internet and answer my followup questions. <article>" (slurp "https://paulgraham.com/writes.html") "</article>")]))
+  
+  (-> [cached-part
+       (->user-messages "As an AI, do you see anything offensive to you in this article?")]
+    (->request default-config)
+    send)
+  ;; => ... :cache_creation_input_tokens 3271 ...
+
+  (-> [cached-part
+       (->user-messages "Should I learn to write or to use AI? What is potentially more useful for life in 21st century?")]
+    (->request default-config)
+    send)
+  ;; => ... :input_tokens 27, :cache_creation_input_tokens 0, :cache_read_input_tokens 3271, ...
+
   comment)
+
 
