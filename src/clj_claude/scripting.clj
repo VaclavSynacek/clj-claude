@@ -2,7 +2,8 @@
   (:require
    [babashka.curl :as curl]
    [cheshire.core :as json]
-   [taoensso.timbre :as log])
+   [taoensso.timbre :as log]
+   [clojure.string :as str])
   (:refer-clojure :exclude [send]))
 
 (def models {:sonnet-latest "claude-3-5-sonnet-latest"
@@ -74,6 +75,12 @@
   [response]
   (-> response :content first :text))
 
+(defn request->request-for-only-token-count
+  [{:keys [endpoint body headers] :as _request}]
+  {:endpoint (str endpoint "/count_tokens")
+   :headers (update-in headers ["anthropic-beta"]
+                       #(str/join "," (conj (str/split % #",") "token-counting-2024-11-01")))
+   :body (dissoc body :max_tokens :stream)}) 
 
 (comment
 
@@ -107,6 +114,13 @@
   ;; WARNING - this part demonstrates cache that works only from 1000 tokens and above
   ;; WARNING - this may result in MORE COST that the other examples here
   (def cached-part (->user-messages ^:cache [(str "read the following article downloaded from the internet and answer my followup questions. <article>" (slurp "https://paulgraham.com/writes.html") "</article>")]))
+
+  ;; to estimate costs, calculate tokens first, free of charge
+  (-> cached-part
+      (->request default-config)
+      request->request-for-only-token-count
+      send)
+  ;; => {:input_tokens 3274}  - approx. $0.013 if sent to with cashing enabled
   
   (-> [cached-part
        (->user-messages "As an AI, do you see anything offensive to you in this article?")]
