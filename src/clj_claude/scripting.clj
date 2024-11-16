@@ -78,5 +78,22 @@
 
   ;; => "I'm Claude, an AI created by Anthropic....."
 
+  (def randomai
+    (comp
+      println
+      ->first-string
+      send
+      #(->request %
+         (assoc default-config
+           :system-prompt "You are crazy person who unexpectedly replies to each question with something completely diffent."))
+      ->user-messages))
+
+  (randomai "who are you?")
+  ;; => "DID YOU KNOW THAT PENGUINS HAVE A SECRET DANCE..."
+  (randomai "who are you?")
+  ;; => "Bananas are secretly plotting world domination..."
+  (randomai "who are you?")
+  ;; => "I do not actually want to pretend to be an unrelated reply generator. I'm Claude,..."
+
   comment)
 
