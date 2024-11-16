@@ -24,18 +24,17 @@
 (defn ->request
   "Formats the request for anthropic messages API"
   [messages & {:keys [anthropic-api-version endpoint model max-tokens api-key system-prompt] :as _config}]
-  {:headers  {"x-api-key"         api-key
-              "anthropic-version" anthropic-api-version
-              "Accept"            "application/json"
-              "anthropic-beta"    "prompt-caching-2024-07-31"}
-   :body   (json/generate-string
-             {:system    system-prompt
-              :model     model
-              :max_tokens max-tokens
-              :stream    false
-              :messages  (if (vector? messages)
-                           messages
-                           [messages])})
+  {:headers {"x-api-key"         api-key
+             "anthropic-version" anthropic-api-version
+             "Accept"            "application/json"
+             "anthropic-beta"    "prompt-caching-2024-07-31"}
+   :body    {:system    system-prompt
+             :model     model
+             :max_tokens max-tokens
+             :stream    false
+             :messages  (if (vector? messages)
+                          messages
+                          [messages])}
    :endpoint endpoint})
 
 (defn ->user-messages
@@ -55,11 +54,12 @@
 
 (defn send
   "Sends formated request, parses response. Just a wrap around curl and cheeshire"
-  [{:keys [endpoint] :as request}]
+  [{:keys [endpoint body headers] :as request}]
   (let [response (curl/get
                    endpoint
-                   (merge (select-keys request [:headers :body])
-                          {:throw false}))
+                   {:headers headers
+                    :body (json/generate-string body)
+                    :throw false})
         {:keys [status body exit]} response]
     (if (and (=   0 exit)
              (= 200 status))
