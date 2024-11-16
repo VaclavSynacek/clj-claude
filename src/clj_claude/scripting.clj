@@ -1,7 +1,8 @@
 (ns clj-claude.scripting
   (:require
    [babashka.curl :as curl]
-   [cheshire.core :as json])
+   [cheshire.core :as json]
+   [taoensso.timbre :as log])
   (:refer-clojure :exclude [send]))
 
 (def models {:sonnet-latest "claude-3-5-sonnet-latest"
@@ -52,9 +53,12 @@
                    (merge (select-keys request [:headers :body])
                           {:throw false}))
         {:keys [status body exit]} response]
-    (when (and (=   0 exit)
-               (= 200 status))
-      (json/parse-string body keyword))))
+    (if (and (=   0 exit)
+             (= 200 status))
+      (json/parse-string body keyword)
+      (do
+        (log/error :api-error {:request request :response response})
+        {}))))
 
 
 (defn ->first-string

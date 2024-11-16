@@ -1,5 +1,6 @@
 {:path ["src"]
  :deps {babashka/babashka.curl {:mvn/version "0.1.2"} 
-        cheshire/cheshire {:mvn/version "5.13.0"}}}
+        cheshire/cheshire {:mvn/version "5.13.0"}
+        com.taoensso/timbre {:mvn/version "6.6.1"}}}
         
         
