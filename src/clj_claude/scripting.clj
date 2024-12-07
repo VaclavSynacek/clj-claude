@@ -2,8 +2,9 @@
   (:require
    [babashka.curl :as curl]
    [cheshire.core :as json]
-   [taoensso.timbre :as log]
-   [clojure.string :as str])
+   [clojure.repl :as repl]
+   [clojure.string :as str]
+   [taoensso.timbre :as log])
   (:refer-clojure :exclude [send]))
 
 (def models {:sonnet-latest "claude-3-5-sonnet-latest"
@@ -24,13 +25,17 @@
 
 (defn ->request
   "Formats the request for anthropic messages API"
-  [messages & {:keys [anthropic-api-version endpoint model max-tokens api-key system-prompt] :as _config}]
+  [messages & {:keys [anthropic-api-version endpoint model max-tokens api-key system-prompt tools] :as _config}]
   {:headers {"x-api-key"         api-key
              "anthropic-version" anthropic-api-version
              "Accept"            "application/json"
              "anthropic-beta"    "prompt-caching-2024-07-31"}
    :body    {:system    system-prompt
              :model     model
+             :tools     tools
+             :tool_choice (when tools
+                            {:disable_parallel_tool_use true
+                             :type :auto})
              :max_tokens max-tokens
              :stream    false
              :messages  (if (vector? messages)
@@ -59,7 +64,9 @@
   (let [response (curl/get
                    endpoint
                    {:headers headers
-                    :body (json/generate-string body)
+                    :body (->> body
+                               (into {} (remove (comp nil? val)))
+                               json/generate-string)
                     :throw false})
         {:keys [status body exit]} response]
     (if (and (=   0 exit)
@@ -81,6 +88,56 @@
    :headers (update-in headers ["anthropic-beta"]
                        #(str/join "," (conj (str/split % #",") "token-counting-2024-11-01")))
    :body (dissoc body :max_tokens :stream)}) 
+
+
+
+(defn fn->tool
+  "Takes a clojure function with arguments [& {:keys [string1 string2 .. ]}]
+   and formats it into tool definition based on the function's docstring"
+  [f]
+  (let [fn-name (-> f .getClass .getName)
+        fn-name (repl/demunge fn-name)
+        fn-sym (symbol fn-name)
+        m (meta (resolve fn-sym))
+        args (:keys (second (first (:arglists m))))]
+    {:name         (name (:name m))
+     :description  (:doc m)
+     :input_schema {:type :object
+                    :properties (into {} (map (fn[arg] {(keyword arg) {:type :string}}) args))
+                    :required (vec (map keyword args))}}))
+
+(defn fns->tools [fs]
+  "Same as fn->tool but for several functions, this one the one to use
+   in prompt specification"
+  (vec (map fn->tool fs)))
+
+(defn exec-tool [{:keys [id name input]}]
+  (log/info :tool-use-execution {:tool name :input input :id id})
+  (let [result (eval (read-string (str "(" name " " (pr-str input) ")")))] 
+    {:type :tool_result
+     :tool_use_id id
+     :content result}))
+
+(defn send-with-tools
+ "Sends formated request, parses response. If stop_reason = tool_use, than
+  executes the tools, updates the request and resends. Until stop_reason != tool_use."
+ [{:keys [endpoint body headers] :as request}]
+ (let [{:keys [content stop_reason] :as iresult} (send request)]
+   (if (= "tool_use" stop_reason)
+     (let [the-use (->> content
+                        (filter #(= "tool_use" (:type %)))
+                        first)
+           result  (exec-tool the-use)
+           old-messages (:messages body)
+           new-messages (vec (concat old-messages
+                                     [{:role :assistant :content content}]
+                                     [{:role :user :content [result]}]))]
+       (recur {:endpoint endpoint
+               :headers headers
+               :body (assoc body :messages new-messages)}))
+     iresult)))
+
+
 
 (comment
 
@@ -133,6 +190,38 @@
     (->request default-config)
     send)
   ;; => ... :input_tokens 27, :cache_creation_input_tokens 0, :cache_read_input_tokens 3271, ...
+
+
+  ;; Tool use example
+
+  ;; Define plain clojure function
+  ;; Currently the it has to accept one argument map and all listed keys
+  ;; are required (at least from the Claude point of view)
+  ;; Do not forget the docstring, it is passed to Claude so that they know
+  ;; how to use the function
+  (defn get-weather
+   "Gets weather in a city at time, both city and time are required"
+   [ & {:keys [city time]}]
+   (case city
+     "Prague" (str "nice weather at " time)
+     "London" "rainy as always"
+     "storm is approaching"))
+
+  (get-weather :city "Prague" :time "8AM")
+  (get-weather :city "London" :time "8AM")
+  (get-weather :city "Paris"  :time "anytime")
+
+  ;; Now run a prompt for which Claude will need to use the above function
+  ;; The function is run localy auto-magically
+  ;; If this feels unsafe, implement guardrails in the function
+  ;; and/or stronger validations on input from Claude
+  (-> "What is the weather like in Prague and in London? Where should I want to be now?"
+    ->user-messages
+    (->request (assoc default-config
+                      :tools (fns->tools [get-weather])))
+    send-with-tools
+    ->first-string
+    println)
 
   comment)
 

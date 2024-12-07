@@ -11,10 +11,10 @@ A minimal wrapper around the Anthropic Claude APIs, intended to be used in scrip
 
 ## Feature status
 - [ ] ~~streaming response~~
-- [x] call through [Anthropic API](https://docs.anthropic.com/en/api/getting-started)
+- [X] call through [Anthropic API](https://docs.anthropic.com/en/api/getting-started)
 - [ ] call through [AWS Bedrock API](https://aws.amazon.com/bedrock/)
 - [ ] [Vision](https://docs.anthropic.com/en/docs/build-with-claude/vision)
-- [ ] [Tool use](https://docs.anthropic.com/en/docs/build-with-claude/tool-use)
+- [X] [Tool use](https://docs.anthropic.com/en/docs/build-with-claude/tool-use)
 - [ ] [Computer use (beta)](https://docs.anthropic.com/en/docs/build-with-claude/computer-use)
 - [X] [Prompt caching (beta)](https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching)
 - [ ] [Message batches (beta)](https://docs.anthropic.com/en/docs/build-with-claude/message-batches)
