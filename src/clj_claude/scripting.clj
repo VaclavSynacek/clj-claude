@@ -2,6 +2,7 @@
   (:require
    [babashka.curl :as curl]
    [cheshire.core :as json]
+   [clojure.java.io :as io]
    [clojure.repl :as repl]
    [clojure.string :as str]
    [taoensso.timbre :as log])
@@ -66,7 +67,9 @@
                    {:headers headers
                     :body (->> body
                                (into {} (remove (comp nil? val)))
-                               json/generate-string)
+                               json/generate-string
+                               .getBytes
+                               io/input-stream)
                     :throw false})
         {:keys [status body exit]} response]
     (if (and (=   0 exit)
