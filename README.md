@@ -8,6 +8,8 @@ A minimal wrapper around the Anthropic Claude APIs, intended to be used in scrip
   * no support for streaming, which just complicates matters in scripts (as opposed to interactive tools where streaming is essential)
   * intentionally relies on [babashka.curl](https://github.com/babashka/babashka.curl) rather than http clients for long-lived processes
 * should support calling/billing through several providers
+* same api as [clj-nova](https://github.com/VaclavSynacek/clj-nova) wrapper
+  library (where possible)
 
 ## Feature status
 - [ ] ~~streaming response~~
